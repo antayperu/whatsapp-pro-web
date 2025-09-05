@@ -419,20 +419,34 @@ const verificarProcesoCompletado = () => {
           </button>
           
           <button
-            className="btn btn-secondary"
-            onClick={iniciarEnvioWeb}
-            disabled={enviando || selectedContacts.length === 0}
+            disabled={true}
+            style={{
+              padding: '0.75rem',
+              backgroundColor: '#e5e7eb',
+              color: '#9ca3af',
+              cursor: 'not-allowed',
+              opacity: 0.5
+            }}
           >
-            🌐 Envío Web Manual
+            🌐 Envío Web Manual (Próximamente)
           </button>
           
-          <button
-            className="btn btn-info"
-            onClick={generarHelperDiagnostico}
-            disabled={enviando}
-          >
-            🔍 Generar Diagnóstico
-          </button>
+       <button
+          onClick={async () => {
+            const resultado = await helperGenerator.generarHelperDiagnostico([], {});
+            if (resultado.success) {
+              alert(`Diagnóstico generado: ${resultado.archivo}`);
+            }
+          }}
+          style={{
+            padding: '0.75rem',
+            backgroundColor: '#f59e0b',
+            color: 'white',
+            cursor: 'pointer'
+          }}
+        >
+          🔍 GENERAR DIAGNÓSTICO DEL SISTEMA
+        </button>
         </div>
 
         {/* Instrucciones básicas */}
