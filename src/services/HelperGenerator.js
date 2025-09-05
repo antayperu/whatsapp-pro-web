@@ -459,7 +459,8 @@ class HelperGenerator {
   textoLimpio = textoLimpio.replace(/\n[ \t]+/g, '\n');
   textoLimpio = textoLimpio.replace(/[ \t]+\n/g, '\n');
   textoLimpio = textoLimpio.replace(/\n{3,}/g, '\n\n');
-  textoLimpio = textoLimpio.replace(/\n/g, ' ');
+  //textoLimpio = textoLimpio.replace(/\n/g, ' ');
+  
   
   // PASO 5: Trim y validar longitud
   textoLimpio = textoLimpio.trim();
@@ -565,20 +566,22 @@ def configurar_chrome():
     options.add_experimental_option("useAutomationExtension", False)
     
     try:
-        # Intentar con webdriver manager
+        # INTENTO 1: Chrome directo (MAS RAPIDO)
         try:
-            from webdriver_manager.chrome import ChromeDriverManager
-            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-        except:
-            # Fallback sin webdriver-manager
             driver = webdriver.Chrome(options=options)
-        
-        driver.set_page_load_timeout(60)
-        print("Chrome configurado exitosamente")
+            print("Chrome iniciado directamente")
+            return driver
+        except:
+            print("Chrome directo falló, probando con ChromeDriverManager...")
+            pass
+            
+        # INTENTO 2: ChromeDriverManager (fallback)
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        print("Chrome iniciado con ChromeDriverManager")
         return driver
         
     except Exception as e:
-        print(f"Error configurando Chrome: {e}")
+        print(f"Error iniciando Chrome: {e}")
         return None
 
 def verificar_whatsapp(driver, max_intentos=18):
@@ -607,7 +610,13 @@ def enviar_mensaje(driver, contacto, indice, total):
     try:
         nombre = contacto['name']
         telefono = contacto['phone']
-        mensaje = contacto['message']
+        mensaje_base = contacto['message']
+        # PERSONALIZAR MENSAJE con nombre del contacto (igual que versión desktop)
+        if not mensaje_base.lower().startswith('hola'):
+            mensaje = f"Hola {nombre}!\\n\\n{mensaje_base}"
+        else:
+            # Si ya tiene saludo, reemplazar variables {nombre} o {name}
+            mensaje = mensaje_base.replace('{nombre}', nombre).replace('{name}', nombre)
         
         # Asegurar que el número tenga el signo +
         if not telefono.startswith('+'):
@@ -948,7 +957,7 @@ crearBatFuncional(pythonCode, config) {
       `echo contactos = [] >> "%TEMP%\\${pythonFileName}"`,
       `echo. >> "%TEMP%\\${pythonFileName}"`,
       ...config.contactos.map((contacto, index) => [
-        `echo contacto = {'name': '${contacto.name.replace(/'/g, "")}', 'phone': '${contacto.phone}', 'message': '${contacto.message.replace(/'/g, "").replace(/\n/g, " ")}'}  >> "%TEMP%\\${pythonFileName}"`,
+        `echo contacto = {'name': '${contacto.name.replace(/'/g, "")}', 'phone': '${contacto.phone}', 'message': '${contacto.message.replace(/'/g, "").replace(/\n/g, "\\n")}'}  >> "%TEMP%\\${pythonFileName}"`,
         `echo contactos.append(contacto) >> "%TEMP%\\${pythonFileName}"`
       ]).flat(),
       
@@ -972,13 +981,21 @@ crearBatFuncional(pythonCode, config) {
       `echo     print(f"📁 Sesión guardada en: {user_data_dir}") >> "%TEMP%\\${pythonFileName}"`,
       `echo. >> "%TEMP%\\${pythonFileName}"`,
       `echo     try: >> "%TEMP%\\${pythonFileName}"`,
+      `echo         # INTENTO 1: Chrome directo (MAS RAPIDO) >> "%TEMP%\\${pythonFileName}"`,
+      `echo         try: >> "%TEMP%\\${pythonFileName}"`,
+      `echo             driver = webdriver.Chrome(options=options) >> "%TEMP%\\${pythonFileName}"`,
+      `echo             print("Chrome iniciado directamente") >> "%TEMP%\\${pythonFileName}"`,
+      `echo             return driver >> "%TEMP%\\${pythonFileName}"`,
+      `echo         except: >> "%TEMP%\\${pythonFileName}"`,
+      `echo             print("Chrome directo fallo, probando con ChromeDriverManager...") >> "%TEMP%\\${pythonFileName}"`,
+      `echo             pass >> "%TEMP%\\${pythonFileName}"`,
+      `echo         # INTENTO 2: ChromeDriverManager (fallback) >> "%TEMP%\\${pythonFileName}"`,
       `echo         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options) >> "%TEMP%\\${pythonFileName}"`,
-      `echo         print("Chrome iniciado correctamente") >> "%TEMP%\\${pythonFileName}"`,
+      `echo         print("Chrome iniciado con ChromeDriverManager") >> "%TEMP%\\${pythonFileName}"`,
       `echo         return driver >> "%TEMP%\\${pythonFileName}"`,
       `echo     except Exception as e: >> "%TEMP%\\${pythonFileName}"`,
       `echo         print(f"Error iniciando Chrome: {e}") >> "%TEMP%\\${pythonFileName}"`,
       `echo         return None >> "%TEMP%\\${pythonFileName}"`,
-      `echo. >> "%TEMP%\\${pythonFileName}"`,
       
       // Función verificar WhatsApp
       `echo def verificar_whatsapp(driver): >> "%TEMP%\\${pythonFileName}"`,
@@ -1000,7 +1017,12 @@ crearBatFuncional(pythonCode, config) {
       `echo     try: >> "%TEMP%\\${pythonFileName}"`,
       `echo         nombre = contacto['name'] >> "%TEMP%\\${pythonFileName}"`,
       `echo         telefono = contacto['phone'] >> "%TEMP%\\${pythonFileName}"`,
-      `echo         mensaje = contacto['message'] >> "%TEMP%\\${pythonFileName}"`,
+      `echo         mensaje_base = contacto['message'] >> "%TEMP%\\${pythonFileName}"`,
+      `echo         # PERSONALIZAR MENSAJE con nombre del contacto >> "%TEMP%\\${pythonFileName}"`,
+      `echo         if not mensaje_base.lower().startswith('hola'): >> "%TEMP%\\${pythonFileName}"`,
+      `echo             mensaje = f"Hola {nombre}!\\n\\n{mensaje_base}" >> "%TEMP%\\${pythonFileName}"`,
+      `echo         else: >> "%TEMP%\\${pythonFileName}"`,
+      `echo             mensaje = mensaje_base.replace('{nombre}', nombre).replace('{name}', nombre) >> "%TEMP%\\${pythonFileName}"`,
       `echo         print(f"[{indice+1}/{total}] Enviando a {nombre}...") >> "%TEMP%\\${pythonFileName}"`,
       `echo         mensaje_url = urllib.parse.quote(mensaje) >> "%TEMP%\\${pythonFileName}"`,
       `echo         url = f"https://web.whatsapp.com/send?phone={telefono}&text={mensaje_url}" >> "%TEMP%\\${pythonFileName}"`,
