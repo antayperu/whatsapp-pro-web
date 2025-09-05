@@ -1,14 +1,35 @@
-﻿import React, { useState, useEffect } from 'react';
-import ExcelImporter from './ExcelImporter';
+import React, { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
+
+
+// ESQUEMA ESTANDARIZADO DE DATOS
+const CONTACT_SCHEMA = {
+  id: '',
+  nombre: '', // Campo unificado
+  telefono: '', // Campo unificado  
+  mensaje: '', // Campo obligatorio visible
+  empresa: '',
+  email: '',
+  fechaCreacion: '',
+  estado: 'PENDIENTE' // PENDIENTE, ENVIADO, FALLIDO
+};
 
 const ContactManager = () => {
   const [contacts, setContacts] = useState([]);
   const [filteredContacts, setFilteredContacts] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedContacts, setSelectedContacts] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [editingContact, setEditingContact] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  
+  // Estados del formulario
+  const [formData, setFormData] = useState(CONTACT_SCHEMA);
+  const [errors, setErrors] = useState({});
+  
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     loadContacts();
@@ -16,880 +37,1411 @@ const ContactManager = () => {
 
   useEffect(() => {
     filterContacts();
-  }, [searchQuery, contacts]);
+  }, [contacts, searchTerm]);
 
+  // FUNCIÓN CRÍTICA: Cargar y estandarizar contactos existentes
   const loadContacts = () => {
-    const saved = localStorage.getItem('whatsapp-contacts');
-    const loadedContacts = saved ? JSON.parse(saved) : [];
-    setContacts(loadedContacts);
+    try {
+      const saved = localStorage.getItem('whatsapp-contacts');
+      const rawContacts = saved ? JSON.parse(saved) : [];
+      
+      console.log('📋 Contactos raw cargados:', rawContacts);
+      
+      // ESTANDARIZAR todos los contactos al esquema único
+      const standardizedContacts = rawContacts.map(contact => standardizeContact(contact));
+      
+      console.log('✅ Contactos estandarizados:', standardizedContacts);
+      
+      setContacts(standardizedContacts);
+      
+      // Guardar estructura estandarizada
+      localStorage.setItem('whatsapp-contacts', JSON.stringify(standardizedContacts));
+      
+    } catch (error) {
+      console.error('Error cargando contactos:', error);
+      setContacts([]);
+    }
   };
 
-  const saveContacts = (newContacts) => {
-    localStorage.setItem('whatsapp-contacts', JSON.stringify(newContacts));
-    setContacts(newContacts);
+  // FUNCIÓN CENTRAL: Estandarizar cualquier estructura de contacto
+  const standardizeContact = (rawContact) => {
+    return {
+      id: rawContact.id || generateUniqueId(),
+      nombre: 
+        rawContact.nombre || 
+        rawContact.CONTACTO || 
+        rawContact.contacto || 
+        rawContact.Inquilino || 
+        rawContact.inquilino || 
+        'Sin nombre',
+      telefono: 
+        rawContact.telefono || 
+        rawContact.TELÉFONO || 
+        rawContact.telefono || 
+        rawContact.NumeroTelefono || 
+        rawContact.numeroTelefono || 
+        rawContact.phone || 
+        '',
+      mensaje: 
+        rawContact.mensaje || 
+        rawContact.Mensaje || 
+        rawContact.MESSAGE || 
+        rawContact.message || 
+        'Mensaje predeterminado',
+      empresa: 
+        rawContact.empresa || 
+        rawContact.EMPRESA || 
+        rawContact.Empresa || 
+        '',
+      email: 
+        rawContact.email || 
+        rawContact.EMAIL || 
+        rawContact.Email || 
+        '',
+      fechaCreacion: 
+        rawContact.fechaCreacion || 
+        rawContact.AGREGADO || 
+        rawContact.agregado || 
+        new Date().toLocaleDateString(),
+      estado: 
+        rawContact.estado || 
+        rawContact.EstatusEnvio || 
+        rawContact.status || 
+        'PENDIENTE'
+    };
+  };
+
+  const generateUniqueId = () => {
+    return `contact_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   };
 
   const filterContacts = () => {
-    if (!searchQuery) {
+    if (!searchTerm.trim()) {
       setFilteredContacts(contacts);
       return;
     }
-    
-    const filtered = contacts.filter(contact => 
-      contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      contact.phone.includes(searchQuery) ||
-      contact.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      contact.company.toLowerCase().includes(searchQuery.toLowerCase())
+
+    const filtered = contacts.filter(contact =>
+      contact.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      contact.telefono.includes(searchTerm) ||
+      contact.mensaje.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      contact.empresa.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
     setFilteredContacts(filtered);
   };
 
-  const addContact = (contactData) => {
-    const newContact = {
-      id: `contact_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name: contactData.name || '',
-      phone: contactData.phone || '',
-      email: contactData.email || '',
-      company: contactData.company || '',
-      city: contactData.city || '',
-      createdAt: new Date().toISOString()
+  // VALIDACIÓN ROBUSTA BASADA EN ESTÁNDARES
+  const validateContact = (contact) => {
+    const newErrors = {};
+
+    if (!contact.nombre.trim()) {
+      newErrors.nombre = 'El nombre es obligatorio';
+    }
+
+    if (!contact.telefono.trim()) {
+      newErrors.telefono = 'El teléfono es obligatorio';
+    } else if (!/^\+?[\d\s\-\(\)]{8,15}$/.test(contact.telefono)) {
+      newErrors.telefono = 'Formato de teléfono inválido';
+    }
+
+    if (!contact.mensaje.trim()) {
+      newErrors.mensaje = 'El mensaje es obligatorio';
+    } else if (contact.mensaje.length > 500) {
+      newErrors.mensaje = 'El mensaje no puede exceder 500 caracteres';
+    }
+
+    if (contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) {
+      newErrors.email = 'Formato de email inválido';
+    }
+
+    return newErrors;
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+
+    const validationErrors = validateContact(formData);
+    setErrors(validationErrors);
+
+    if (Object.keys(validationErrors).length > 0) {
+      return;
+    }
+
+    // Limpiar y estandarizar teléfono
+    const cleanPhone = formData.telefono.replace(/[\s\-\(\)]/g, '');
+    const standardizedPhone = cleanPhone.startsWith('+') ? cleanPhone : `+51${cleanPhone}`;
+
+    const contactToSave = {
+      ...formData,
+      telefono: standardizedPhone,
+      fechaCreacion: editingContact ? formData.fechaCreacion : new Date().toLocaleDateString()
     };
 
-    const updatedContacts = [...contacts, newContact];
-    saveContacts(updatedContacts);
-    return newContact;
+    let updatedContacts;
+    if (editingContact) {
+      updatedContacts = contacts.map(contact =>
+        contact.id === editingContact.id ? contactToSave : contact
+      );
+    } else {
+      contactToSave.id = generateUniqueId();
+      updatedContacts = [...contacts, contactToSave];
+    }
+
+    setContacts(updatedContacts);
+    localStorage.setItem('whatsapp-contacts', JSON.stringify(updatedContacts));
+
+    // Reset form
+    setFormData(CONTACT_SCHEMA);
+    setEditingContact(null);
+    setShowModal(false);
+    setErrors({});
   };
 
-  const deleteContact = (contactId) => {
-    const updatedContacts = contacts.filter(c => c.id !== contactId);
-    saveContacts(updatedContacts);
-    setSelectedContacts(selectedContacts.filter(id => id !== contactId));
+  const handleEdit = (contact) => {
+    setFormData(contact);
+    setEditingContact(contact);
+    setShowModal(true);
   };
 
-  const deleteSelectedContacts = () => {
-    if (window.confirm(`¿Eliminar ${selectedContacts.length} contactos seleccionados?`)) {
-      const updatedContacts = contacts.filter(c => !selectedContacts.includes(c.id));
-      saveContacts(updatedContacts);
-      setSelectedContacts([]);
+  const handleDelete = (contactId) => {
+    if (window.confirm('¿Estás seguro de eliminar este contacto?')) {
+      const updatedContacts = contacts.filter(contact => contact.id !== contactId);
+      setContacts(updatedContacts);
+      localStorage.setItem('whatsapp-contacts', JSON.stringify(updatedContacts));
     }
   };
 
-  const exportToCSV = () => {
-    const headers = ['name', 'phone', 'email', 'company', 'city', 'createdAt'];
-    const csvContent = [
-      headers.join(','),
-      ...contacts.map(contact => 
-        headers.map(header => `"${contact[header] || ''}"`).join(',')
-      )
-    ].join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `contactos_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-  };
-
   const handleSelectContact = (contactId) => {
-    setSelectedContacts(prev => 
-      prev.includes(contactId) 
+    setSelectedContacts(prev =>
+      prev.includes(contactId)
         ? prev.filter(id => id !== contactId)
         : [...prev, contactId]
     );
   };
 
   const handleSelectAll = () => {
-    if (selectedContacts.length === filteredContacts.length && filteredContacts.length > 0) {
+    if (selectedContacts.length === filteredContacts.length) {
       setSelectedContacts([]);
     } else {
-      setSelectedContacts(filteredContacts.map(c => c.id));
+      setSelectedContacts(filteredContacts.map(contact => contact.id));
     }
   };
 
+  // IMPORTACIÓN EXCEL MEJORADA
+  const handleExcelImport = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      // Cargar SheetJS dinámicamente
+      const XLSX = await import('xlsx');
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        console.log('📊 Datos Excel raw:', jsonData);
+
+        // Procesar y estandarizar datos del Excel
+        const processedContacts = jsonData.map(row => {
+          const standardized = standardizeContact(row);
+          
+          // Validar datos mínimos
+          if (!standardized.nombre || standardized.nombre === 'Sin nombre' || 
+              !standardized.telefono || standardized.telefono === '') {
+            console.warn('⚠️ Contacto inválido omitido:', row);
+            return null;
+          }
+          
+          return standardized;
+        }).filter(Boolean); // Eliminar nulos
+
+        console.log('✅ Contactos procesados del Excel:', processedContacts);
+
+        if (processedContacts.length === 0) {
+          alert('No se encontraron contactos válidos en el archivo Excel');
+          return;
+        }
+
+        // Combinar con contactos existentes
+        const existingContacts = contacts;
+        const newContacts = processedContacts.filter(newContact => 
+          !existingContacts.some(existing => 
+            existing.telefono === newContact.telefono
+          )
+        );
+
+        if (newContacts.length === 0) {
+          alert('Todos los contactos del Excel ya existen en el sistema');
+          return;
+        }
+
+        const updatedContacts = [...existingContacts, ...newContacts];
+        setContacts(updatedContacts);
+        localStorage.setItem('whatsapp-contacts', JSON.stringify(updatedContacts));
+
+        alert(`✅ Se importaron ${newContacts.length} contactos nuevos de ${processedContacts.length} procesados`);
+        setShowImportModal(false);
+      };
+
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      console.error('Error importando Excel:', error);
+      alert('Error al importar el archivo Excel');
+    }
+
+    // Reset input
+    event.target.value = '';
+  };
+
+  const exportToCSV = () => {
+    if (contacts.length === 0) {
+      alert('No hay contactos para exportar');
+      return;
+    }
+
+    const csvHeaders = ['Nombre', 'Teléfono', 'Mensaje', 'Empresa', 'Email', 'Estado', 'Fecha Creación'];
+    const csvData = contacts.map(contact => [
+      contact.nombre,
+      contact.telefono,
+      contact.mensaje,
+      contact.empresa,
+      contact.email,
+      contact.estado,
+      contact.fechaCreacion
+    ]);
+
+    const csvContent = [csvHeaders, ...csvData]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `contactos_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const showMessage = (mensaje) => {
+    setSelectedMessage(mensaje);
+    setShowMessageModal(true);
+  };
+
+  const getEstadoColor = (estado) => {
+    switch (estado) {
+      case 'ENVIADO': return '#28a745';
+      case 'FALLIDO': return '#dc3545';
+      default: return '#ffc107';
+    }
+  };
+
+  const getCompletitudPorcentaje = (contact) => {
+    const campos = ['nombre', 'telefono', 'mensaje'];
+    const completos = campos.filter(campo => contact[campo] && contact[campo].trim() !== '').length;
+    return Math.round((completos / campos.length) * 100);
+  };
+
   return (
-    <div style={{ padding: '1.5rem', maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        marginBottom: '1.5rem' 
-      }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1a202c', marginBottom: '0.25rem' }}>
-            Gestión de Contactos
-          </h1>
-          <p style={{ color: '#718096' }}>
-            {contacts.length} contactos • {selectedContacts.length} seleccionados
-          </p>
+    <div className="contact-manager">
+      {/* Header con estadísticas */}
+      <div className="manager-header">
+        <h2>📱 Gestión de Contactos</h2>
+        <div className="stats-summary">
+          <div className="stat-item">
+            <span className="stat-number">{contacts.length}</span>
+            <span className="stat-label">Total Contactos</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-number">{selectedContacts.length}</span>
+            <span className="stat-label">Seleccionados</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-number">
+              {contacts.filter(c => c.estado === 'ENVIADO').length}
+            </span>
+            <span className="stat-label">Enviados</span>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+      </div>
+
+      {/* Toolbar de acciones */}
+      <div className="toolbar">
+        <div className="search-section">
+          <div className="search-box">
+            <input
+              type="text"
+              placeholder="Buscar por nombre, teléfono, mensaje..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="search-input"
+            />
+            <button 
+              className="search-clear"
+              onClick={() => setSearchTerm('')}
+              title="Limpiar búsqueda"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <div className="action-buttons">
           <button
-            onClick={() => setShowImportModal(true)}
-            style={{
-              backgroundColor: '#3182ce',
-              color: 'white',
-              padding: '0.5rem 1rem',
-              borderRadius: '0.5rem',
-              border: 'none',
-              fontWeight: '500',
-              cursor: 'pointer',
-              fontSize: '0.875rem'
+            className="btn btn-primary"
+            onClick={() => {
+              setFormData(CONTACT_SCHEMA);
+              setEditingContact(null);
+              setErrors({});
+              setShowModal(true);
             }}
-            onMouseOver={(e) => e.target.style.backgroundColor = '#2c5282'}
-            onMouseOut={(e) => e.target.style.backgroundColor = '#3182ce'}
-          >
-            📥 Importar Excel
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            style={{
-              backgroundColor: '#25D366',
-              color: 'white',
-              padding: '0.5rem 1rem',
-              borderRadius: '0.5rem',
-              border: 'none',
-              fontWeight: '500',
-              cursor: 'pointer',
-              fontSize: '0.875rem'
-            }}
-            onMouseOver={(e) => e.target.style.backgroundColor = '#128C7E'}
-            onMouseOut={(e) => e.target.style.backgroundColor = '#25D366'}
           >
             ➕ Agregar Contacto
           </button>
+
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowImportModal(true)}
+          >
+            📊 Importar Excel
+          </button>
+
+          <button
+            className="btn btn-info"
+            onClick={exportToCSV}
+            disabled={contacts.length === 0}
+          >
+            💾 Exportar CSV
+          </button>
+
+          {selectedContacts.length > 0 && (
+            <button
+              className="btn btn-danger"
+              onClick={() => {
+                if (window.confirm(`¿Eliminar ${selectedContacts.length} contactos seleccionados?`)) {
+                  const updatedContacts = contacts.filter(c => !selectedContacts.includes(c.id));
+                  setContacts(updatedContacts);
+                  localStorage.setItem('whatsapp-contacts', JSON.stringify(updatedContacts));
+                  setSelectedContacts([]);
+                }
+              }}
+            >
+              🗑️ Eliminar Seleccionados
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Search and Actions */}
-      <div style={{ 
-        backgroundColor: 'white', 
-        borderRadius: '0.5rem', 
-        border: '1px solid #e2e8f0', 
-        padding: '1rem', 
-        marginBottom: '1.5rem' 
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ flex: 1 }}>
-            <input
-              type="text"
-              placeholder="Buscar contactos por nombre, teléfono, email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem 1rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '0.5rem',
-                fontSize: '0.875rem'
-              }}
-            />
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              onClick={handleSelectAll}
-              style={{
-                padding: '0.5rem 0.75rem',
-                fontSize: '0.875rem',
-                fontWeight: '500',
-                color: '#374151',
-                backgroundColor: '#f3f4f6',
-                border: 'none',
-                borderRadius: '0.5rem',
-                cursor: 'pointer'
-              }}
-              onMouseOver={(e) => e.target.style.backgroundColor = '#e5e7eb'}
-              onMouseOut={(e) => e.target.style.backgroundColor = '#f3f4f6'}
-            >
-              {selectedContacts.length === filteredContacts.length && filteredContacts.length > 0 ? 'Deseleccionar' : 'Seleccionar'} Todos
-            </button>
-            {selectedContacts.length > 0 && (
-              <button
-                onClick={deleteSelectedContacts}
-                style={{
-                  padding: '0.5rem 0.75rem',
-                  fontSize: '0.875rem',
-                  fontWeight: '500',
-                  color: 'white',
-                  backgroundColor: '#ef4444',
-                  border: 'none',
-                  borderRadius: '0.5rem',
-                  cursor: 'pointer'
-                }}
-                onMouseOver={(e) => e.target.style.backgroundColor = '#dc2626'}
-                onMouseOut={(e) => e.target.style.backgroundColor = '#ef4444'}
-              >
-                🗑️ Eliminar ({selectedContacts.length})
-              </button>
-            )}
-            <button
-              onClick={exportToCSV}
-              style={{
-                padding: '0.5rem 0.75rem',
-                fontSize: '0.875rem',
-                fontWeight: '500',
-                color: '#374151',
-                backgroundColor: '#f3f4f6',
-                border: 'none',
-                borderRadius: '0.5rem',
-                cursor: 'pointer'
-              }}
-              onMouseOver={(e) => e.target.style.backgroundColor = '#e5e7eb'}
-              onMouseOut={(e) => e.target.style.backgroundColor = '#f3f4f6'}
-            >
-              📤 Exportar CSV
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Contacts Table */}
-      <div style={{ backgroundColor: 'white', borderRadius: '0.5rem', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-        {filteredContacts.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem' }}>
-            <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>👥</div>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: '500', color: '#1a202c', marginBottom: '0.5rem' }}>
-              {contacts.length === 0 ? 'No hay contactos' : 'No se encontraron contactos'}
-            </h3>
-            <p style={{ color: '#718096', marginBottom: '1rem' }}>
-              {contacts.length === 0 
-                ? 'Comienza importando contactos desde un archivo CSV'
-                : 'Intenta con otros términos de búsqueda'
-              }
-            </p>
-            {contacts.length === 0 && (
-              <button
-                onClick={() => setShowImportModal(true)}
-                style={{
-                  backgroundColor: '#25D366',
-                  color: 'white',
-                  padding: '0.75rem 1.5rem',
-                  borderRadius: '0.5rem',
-                  border: 'none',
-                  fontWeight: '500',
-                  cursor: 'pointer'
-                }}
-                onMouseOver={(e) => e.target.style.backgroundColor = '#128C7E'}
-                onMouseOut={(e) => e.target.style.backgroundColor = '#25D366'}
-              >
-                Importar Contactos
-              </button>
-            )}
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead style={{ backgroundColor: '#f9fafb' }}>
-                <tr>
-                  <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: '500', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      {/* Tabla de contactos con columna MENSAJE */}
+      <div className="contacts-table-container">
+        <table className="contacts-table">
+          <thead>
+            <tr>
+              <th width="40">
+                <input
+                  type="checkbox"
+                  checked={selectedContacts.length === filteredContacts.length && filteredContacts.length > 0}
+                  onChange={handleSelectAll}
+                />
+              </th>
+              <th width="200">CONTACTO</th>
+              <th width="150">TELÉFONO</th>
+              <th width="250">MENSAJE</th>
+              <th width="120">EMPRESA</th>
+              <th width="80">ESTADO</th>
+              <th width="100">COMPLETITUD</th>
+              <th width="120">ACCIONES</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredContacts.length === 0 ? (
+              <tr>
+                <td colSpan="8" className="no-data">
+                  {searchTerm ? 'No se encontraron contactos que coincidan con la búsqueda' : 'No hay contactos. Agrega contactos manualmente o importa desde Excel.'}
+                </td>
+              </tr>
+            ) : (
+              filteredContacts.map((contact) => (
+                <tr key={contact.id} className={selectedContacts.includes(contact.id) ? 'selected' : ''}>
+                  <td>
                     <input
                       type="checkbox"
-                      checked={selectedContacts.length === filteredContacts.length && filteredContacts.length > 0}
-                      onChange={handleSelectAll}
-                      style={{ accentColor: '#25D366' }}
+                      checked={selectedContacts.includes(contact.id)}
+                      onChange={() => handleSelectContact(contact.id)}
                     />
-                  </th>
-                  <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: '500', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Contacto
-                  </th>
-                  <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: '500', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Teléfono
-                  </th>
-                  <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: '500', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Email
-                  </th>
-                  <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: '500', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Empresa
-                  </th>
-                  <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: '500', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Agregado
-                  </th>
-                  <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: '500', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody style={{ backgroundColor: 'white' }}>
-                {filteredContacts.map((contact, index) => (
-                  <tr key={contact.id} style={{ 
-                    borderTop: index > 0 ? '1px solid #f3f4f6' : 'none',
-                    '&:hover': { backgroundColor: '#f9fafb' }
-                  }}>
-                    <td style={{ padding: '1rem 1.5rem', whiteSpace: 'nowrap' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedContacts.includes(contact.id)}
-                        onChange={() => handleSelectContact(contact.id)}
-                        style={{ accentColor: '#25D366' }}
-                      />
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem', whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <div style={{ 
-                          width: '2.5rem', 
-                          height: '2.5rem', 
-                          backgroundColor: '#e5e7eb', 
-                          borderRadius: '50%', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          color: '#6b7280', 
-                          fontWeight: '500',
-                          marginRight: '1rem'
-                        }}>
-                          {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#1a202c' }}>
-                            {contact.name || 'Sin nombre'}
-                          </div>
-                          {contact.city && (
-                            <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>{contact.city}</div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem', whiteSpace: 'nowrap' }}>
-                      <div style={{ fontSize: '0.875rem', color: '#1a202c', fontFamily: 'monospace' }}>{contact.phone}</div>
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem', whiteSpace: 'nowrap' }}>
-                      <div style={{ fontSize: '0.875rem', color: '#1a202c' }}>{contact.email || '-'}</div>
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem', whiteSpace: 'nowrap' }}>
-                      <div style={{ fontSize: '0.875rem', color: '#1a202c' }}>{contact.company || '-'}</div>
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem', whiteSpace: 'nowrap' }}>
-                      <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
-                        {new Date(contact.createdAt).toLocaleDateString('es-ES')}
-                      </div>
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem', whiteSpace: 'nowrap', fontSize: '0.875rem', fontWeight: '500' }}>
+                  </td>
+                  <td>
+                    <div className="contact-name">
+                      <div className="avatar">{contact.nombre.charAt(0).toUpperCase()}</div>
+                      <span>{contact.nombre}</span>
+                    </div>
+                  </td>
+                  <td className="phone-cell">{contact.telefono}</td>
+                  <td className="message-cell">
+                    <div className="message-preview">
+                      <span className="message-text">
+                        {contact.mensaje.length > 50 
+                          ? `${contact.mensaje.substring(0, 50)}...` 
+                          : contact.mensaje
+                        }
+                      </span>
+                      {contact.mensaje.length > 50 && (
+                        <button 
+                          className="view-full-message"
+                          onClick={() => showMessage(contact.mensaje)}
+                          title="Ver mensaje completo"
+                        >
+                          👁️
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td>{contact.empresa || '-'}</td>
+                  <td>
+                    <span 
+                      className="status-badge"
+                      style={{ backgroundColor: getEstadoColor(contact.estado) }}
+                    >
+                      {contact.estado}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="completitud-bar">
+                      <div 
+                        className="completitud-fill"
+                        style={{ width: `${getCompletitudPorcentaje(contact)}%` }}
+                      ></div>
+                      <span className="completitud-text">{getCompletitudPorcentaje(contact)}%</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="action-buttons-cell">
                       <button
-                        onClick={() => deleteContact(contact.id)}
-                        style={{
-                          color: '#dc2626',
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          fontSize: '0.875rem'
-                        }}
-                        onMouseOver={(e) => e.target.style.color = '#991b1b'}
-                        onMouseOut={(e) => e.target.style.color = '#dc2626'}
+                        className="btn-icon btn-edit"
+                        onClick={() => handleEdit(contact)}
+                        title="Editar contacto"
                       >
-                        Eliminar
+                        ✏️
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                      <button
+                        className="btn-icon btn-delete"
+                        onClick={() => handleDelete(contact.id)}
+                        title="Eliminar contacto"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
 
-      {/* Modals */}
-      {showImportModal && (
-        <ExcelImporter 
-            onClose={() => setShowImportModal(false)}
-            onImport={(newContacts) => {      
-             const updatedContacts = [...contacts, ...newContacts];
-            saveContacts(updatedContacts);
-            setShowImportModal(false);
-          }}
-        />
-      )}
-
-      {showAddModal && (
-        <AddContactModal
-          onClose={() => setShowAddModal(false)}
-          onAdd={(contactData) => {
-            addContact(contactData);
-            setShowAddModal(false);
-          }}
-        />
-      )}
-    </div>
-  );
-};
-
-// Componente Modal de Importación
-const ImportModal = ({ onClose, onImport }) => {
-  const [csvText, setCsvText] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setCsvText(e.target.result);
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  const parseCSV = (csvText) => {
-    const lines = csvText.trim().split('\n');
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
-    const data = [];
-
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-      const row = {};
-      headers.forEach((header, index) => {
-        row[header] = values[index] || '';
-      });
-      data.push(row);
-    }
-
-    return data;
-  };
-
-  const mapCSVRowToContact = (row) => {
-    const phoneFields = ['phone', 'telefono', 'telephone', 'number', 'numero'];
-    const nameFields = ['name', 'nombre', 'full_name', 'fullname'];
-    const emailFields = ['email', 'correo', 'mail'];
-    const companyFields = ['company', 'empresa', 'organization'];
-    const cityFields = ['city', 'ciudad', 'location'];
-
-    const findField = (fields, row) => {
-      for (const field of fields) {
-        if (row[field]) return row[field];
-      }
-      return '';
-    };
-
-    return {
-      id: `contact_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name: findField(nameFields, row),
-      phone: findField(phoneFields, row),
-      email: findField(emailFields, row),
-      company: findField(companyFields, row),
-      city: findField(cityFields, row),
-      createdAt: new Date().toISOString()
-    };
-  };
-
-  const handleImport = async () => {
-    if (!csvText.trim()) {
-      alert('Por favor selecciona un archivo CSV o pega el contenido');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const csvData = parseCSV(csvText);
-      const importedContacts = [];
-      const errors = [];
-
-      csvData.forEach((row, index) => {
-        try {
-          const contact = mapCSVRowToContact(row);
-          if (contact.phone) {
-            importedContacts.push(contact);
-          } else {
-            errors.push(`Fila ${index + 2}: Número de teléfono requerido`);
-          }
-        } catch (error) {
-          errors.push(`Fila ${index + 2}: ${error.message}`);
-        }
-      });
-
-      setResult({
-        success: true,
-        imported: importedContacts.length,
-        errors: errors,
-        contacts: importedContacts
-      });
-
-      if (importedContacts.length > 0) {
-        setTimeout(() => {
-          onImport(importedContacts);
-        }, 2000);
-      }
-
-    } catch (error) {
-      setResult({
-        success: false,
-        error: error.message,
-        imported: 0,
-        errors: [error.message]
-      });
-    }
-    setLoading(false);
-  };
-
-  return (
-    <div style={{ 
-      position: 'fixed', 
-      inset: 0, 
-      backgroundColor: 'rgba(0, 0, 0, 0.5)', 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      zIndex: 50 
-    }}>
-      <div style={{ 
-        backgroundColor: 'white', 
-        borderRadius: '0.5rem', 
-        padding: '1.5rem', 
-        width: '100%', 
-        maxWidth: '32rem', 
-        margin: '1rem', 
-        maxHeight: '90vh', 
-        overflowY: 'auto' 
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#1a202c' }}>Importar Contactos</h2>
-          <button 
-            onClick={onClose} 
-            style={{ color: '#6b7280', background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer' }}
-          >
-            ✕
-          </button>
-        </div>
-
-        {!result && (
-          <>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>
-                Seleccionar archivo CSV:
-              </label>
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleFileUpload}
-                style={{ 
-                  display: 'block', 
-                  width: '100%', 
-                  fontSize: '0.875rem', 
-                  color: '#6b7280',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '0.375rem',
-                  padding: '0.5rem'
+      {/* Modales y formularios */}
+      
+      {/* Modal de formulario */}
+      {showModal && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h3>{editingContact ? 'Editar Contacto' : 'Nuevo Contacto'}</h3>
+              <button 
+                className="modal-close"
+                onClick={() => {
+                  setShowModal(false);
+                  setErrors({});
                 }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>
-                O pega el contenido CSV:
-              </label>
-              <textarea
-                value={csvText}
-                onChange={(e) => setCsvText(e.target.value)}
-                placeholder="nombre,telefono,email,empresa&#10;Juan Pérez,+1234567890,juan@email.com,Empresa ABC"
-                style={{ 
-                  width: '100%', 
-                  height: '10rem', 
-                  padding: '0.75rem', 
-                  border: '1px solid #d1d5db', 
-                  borderRadius: '0.5rem',
-                  fontSize: '0.875rem',
-                  resize: 'vertical'
-                }}
-              />
-            </div>
-
-            <div style={{ 
-              backgroundColor: '#eff6ff', 
-              padding: '1rem', 
-              borderRadius: '0.5rem', 
-              marginBottom: '1rem',
-              border: '1px solid #bfdbfe'
-            }}>
-              <h3 style={{ fontWeight: '500', color: '#1e40af', marginBottom: '0.5rem' }}>📋 Formato esperado:</h3>
-              <p style={{ fontSize: '0.875rem', color: '#1e40af', marginBottom: '0.5rem' }}>
-                El CSV debe incluir al menos una columna de teléfono. Columnas reconocidas:
-              </p>
-              <ul style={{ fontSize: '0.875rem', color: '#1e40af', paddingLeft: '1rem' }}>
-                <li><strong>Teléfono:</strong> phone, telefono, telephone, number, numero</li>
-                <li><strong>Nombre:</strong> name, nombre, full_name, fullname</li>
-                <li><strong>Email:</strong> email, correo, mail</li>
-                <li><strong>Empresa:</strong> company, empresa, organization</li>
-                <li><strong>Ciudad:</strong> city, ciudad, location</li>
-              </ul>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              <button
-                onClick={onClose}
-                style={{
-                  padding: '0.5rem 1rem',
-                  color: '#374151',
-                  backgroundColor: '#f3f4f6',
-                  border: 'none',
-                  borderRadius: '0.5rem',
-                  cursor: 'pointer'
-                }}
-                onMouseOver={(e) => e.target.style.backgroundColor = '#e5e7eb'}
-                onMouseOut={(e) => e.target.style.backgroundColor = '#f3f4f6'}
               >
-                Cancelar
-              </button>
-              <button
-                onClick={handleImport}
-                disabled={loading || !csvText.trim()}
-                style={{
-                  padding: '0.5rem 1rem',
-                  backgroundColor: '#25D366',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '0.5rem',
-                  cursor: loading || !csvText.trim() ? 'not-allowed' : 'pointer',
-                  opacity: loading || !csvText.trim() ? 0.5 : 1
-                }}
-                onMouseOver={(e) => !loading && csvText.trim() && (e.target.style.backgroundColor = '#128C7E')}
-                onMouseOut={(e) => !loading && csvText.trim() && (e.target.style.backgroundColor = '#25D366')}
-              >
-                {loading ? 'Importando...' : 'Importar Contactos'}
+                ✕
               </button>
             </div>
-          </>
-        )}
 
-        {result && (
-          <div style={{ textAlign: 'center' }}>
-            {result.success ? (
-              <div style={{ color: '#059669' }}>
-                <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>✅</div>
-                <h3 style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '0.5rem' }}>¡Importación Exitosa!</h3>
-                <p style={{ color: '#6b7280', marginBottom: '1rem' }}>
-                  Se importaron <strong>{result.imported}</strong> contactos correctamente
-                </p>
-                {result.errors.length > 0 && (
-                  <div style={{ backgroundColor: '#fef3c7', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #fbbf24' }}>
-                    <p style={{ fontSize: '0.875rem', color: '#92400e' }}>
-                      {result.errors.length} filas con errores (se omitieron)
-                    </p>
-                  </div>
-                )}
+            <form onSubmit={handleSubmit} className="contact-form">
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Nombre *</label>
+                  <input
+                    type="text"
+                    value={formData.nombre}
+                    onChange={(e) => setFormData({...formData, nombre: e.target.value})}
+                    className={errors.nombre ? 'error' : ''}
+                    placeholder="Nombre del contacto"
+                  />
+                  {errors.nombre && <span className="error-message">{errors.nombre}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label>Teléfono *</label>
+                  <input
+                    type="text"
+                    value={formData.telefono}
+                    onChange={(e) => setFormData({...formData, telefono: e.target.value})}
+                    className={errors.telefono ? 'error' : ''}
+                    placeholder="+51987654321"
+                  />
+                  {errors.telefono && <span className="error-message">{errors.telefono}</span>}
+                </div>
               </div>
-            ) : (
-              <div style={{ color: '#dc2626' }}>
-                <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>❌</div>
-                <h3 style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '0.5rem' }}>Error en la Importación</h3>
-                <p style={{ color: '#6b7280', marginBottom: '1rem' }}>{result.error}</p>
-                <button
-                  onClick={() => setResult(null)}
-                  style={{
-                    backgroundColor: '#3182ce',
-                    color: 'white',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '0.5rem',
-                    border: 'none',
-                    cursor: 'pointer'
-                  }}
-                  onMouseOver={(e) => e.target.style.backgroundColor = '#2c5282'}
-                  onMouseOut={(e) => e.target.style.backgroundColor = '#3182ce'}
-                >
-                  Intentar de Nuevo
+
+              <div className="form-group">
+                <label>Mensaje *</label>
+                <textarea
+                  value={formData.mensaje}
+                  onChange={(e) => setFormData({...formData, mensaje: e.target.value})}
+                  className={errors.mensaje ? 'error' : ''}
+                  placeholder="Mensaje que se enviará por WhatsApp"
+                  rows="3"
+                  maxLength="500"
+                />
+                <div className="char-count">{formData.mensaje.length}/500</div>
+                {errors.mensaje && <span className="error-message">{errors.mensaje}</span>}
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Empresa</label>
+                  <input
+                    type="text"
+                    value={formData.empresa}
+                    onChange={(e) => setFormData({...formData, empresa: e.target.value})}
+                    placeholder="Empresa del contacto"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Email</label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    className={errors.email ? 'error' : ''}
+                    placeholder="email@ejemplo.com"
+                  />
+                  {errors.email && <span className="error-message">{errors.email}</span>}
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  {editingContact ? 'Actualizar' : 'Guardar'} Contacto
                 </button>
               </div>
-            )}
+            </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Modal de importación Excel */}
+      {showImportModal && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h3>Importar Contactos desde Excel</h3>
+              <button className="modal-close" onClick={() => setShowImportModal(false)}>✕</button>
+            </div>
+
+            <div className="import-content">
+              <div className="import-instructions">
+                <h4>Formato del archivo Excel:</h4>
+                <ul>
+                  <li><strong>Columna A:</strong> Inquilino (Nombre del contacto)</li>
+                  <li><strong>Columna B:</strong> NumeroTelefono</li>
+                  <li><strong>Columna C:</strong> Mensaje</li>
+                  <li><strong>Columna D:</strong> EstatusEnvio (opcional)</li>
+                </ul>
+              </div>
+
+              <div className="file-upload">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.ods"
+                  onChange={handleExcelImport}
+                  style={{ display: 'none' }}
+                />
+                <button
+                  className="btn btn-primary btn-large"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  📊 Seleccionar Archivo Excel
+                </button>
+                <p className="file-info">Formatos soportados: .xlsx, .xls, .ods</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para ver mensaje completo */}
+      {showMessageModal && (
+        <div className="modal-overlay">
+          <div className="modal message-modal">
+            <div className="modal-header">
+              <h3>Mensaje Completo</h3>
+              <button className="modal-close" onClick={() => setShowMessageModal(false)}>✕</button>
+            </div>
+            <div className="message-content">
+              <p>{selectedMessage}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        .contact-manager {
+          padding: 20px;
+          max-width: 1400px;
+          margin: 0 auto;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .manager-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+          padding: 20px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          border-radius: 10px;
+        }
+
+        .stats-summary {
+          display: flex;
+          gap: 30px;
+        }
+
+        .stat-item {
+          text-align: center;
+        }
+
+        .stat-number {
+          display: block;
+          font-size: 24px;
+          font-weight: bold;
+        }
+
+        .stat-label {
+          font-size: 12px;
+          opacity: 0.9;
+        }
+
+        .toolbar {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+          padding: 15px;
+          background: white;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .search-section {
+          flex: 1;
+          max-width: 400px;
+        }
+
+        .search-box {
+          position: relative;
+        }
+
+        .search-input {
+          width: 100%;
+          padding: 10px 40px 10px 15px;
+          border: 1px solid #ddd;
+          border-radius: 6px;
+          font-size: 14px;
+        }
+
+        .search-clear {
+          position: absolute;
+          right: 10px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: #999;
+        }
+
+        .action-buttons {
+          display: flex;
+          gap: 10px;
+        }
+
+        .btn {
+          padding: 10px 16px;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          font-weight: 500;
+          transition: all 0.3s ease;
+          text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .btn-primary {
+          background: #007bff;
+          color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+          background: #0056b3;
+        }
+
+        .btn-secondary {
+          background: #6c757d;
+          color: white;
+        }
+
+        .btn-info {
+          background: #17a2b8;
+          color: white;
+        }
+
+        .btn-danger {
+          background: #dc3545;
+          color: white;
+        }
+
+        .btn-large {
+          padding: 15px 30px;
+          font-size: 16px;
+        }
+
+        .contacts-table-container {
+          background: white;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .contacts-table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+
+        .contacts-table th {
+          background: #f8f9fa;
+          padding: 12px;
+          text-align: left;
+          font-weight: 600;
+          border-bottom: 2px solid #dee2e6;
+          font-size: 12px;
+          text-transform: uppercase;
+        }
+
+        .contacts-table td {
+          padding: 12px;
+          border-bottom: 1px solid #dee2e6;
+          vertical-align: middle;
+        }
+
+        .contacts-table tr:hover {
+          background: #f8f9fa;
+        }
+
+        .contacts-table tr.selected {
+          background: #e3f2fd;
+        }
+
+        .contact-name {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .avatar {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: #007bff;
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: bold;
+          font-size: 14px;
+        }
+
+        .phone-cell {
+          font-family: monospace;
+          font-size: 13px;
+        }
+
+        .message-cell {
+          max-width: 250px;
+        }
+
+        .message-preview {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .message-text {
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .view-full-message {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 2px;
+          opacity: 0.7;
+        }
+
+        .view-full-message:hover {
+          opacity: 1;
+        }
+
+        .status-badge {
+          padding: 4px 8px;
+          border-radius: 12px;
+          color: white;
+          font-size: 11px;
+          font-weight: bold;
+          text-transform: uppercase;
+        }
+
+        .completitud-bar {
+          position: relative;
+          width: 80px;
+          height: 20px;
+          background: #e9ecef;
+          border-radius: 10px;
+          overflow: hidden;
+        }
+
+        .completitud-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #28a745 100%);
+          transition: width 0.3s ease;
+        }
+
+        .completitud-text {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          font-size: 10px;
+          font-weight: bold;
+          color: #333;
+        }
+
+        .action-buttons-cell {
+          display: flex;
+          gap: 5px;
+        }
+
+        .btn-icon {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 5px;
+          border-radius: 4px;
+          transition: background 0.2s ease;
+        }
+
+        .btn-edit:hover {
+          background: #e3f2fd;
+        }
+
+        .btn-delete:hover {
+          background: #ffebee;
+        }
+
+        .no-data {
+          text-align: center;
+          color: #666;
+          font-style: italic;
+          padding: 40px;
+        }
+
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+        }
+
+        .modal {
+          background: white;
+          border-radius: 10px;
+          width: 90%;
+          max-width: 600px;
+          max-height: 90vh;
+          overflow-y: auto;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .message-modal {
+          max-width: 500px;
+        }
+
+        .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 20px;
+          border-bottom: 1px solid #dee2e6;
+        }
+
+        .modal-close {
+          background: none;
+          border: none;
+          font-size: 18px;
+          cursor: pointer;
+          padding: 5px;
+        }
+
+        .contact-form {
+          padding: 20px;
+        }
+
+        .form-row {
+          display: flex;
+          gap: 15px;
+        }
+
+        .form-group {
+          flex: 1;
+          margin-bottom: 20px;
+        }
+
+        .form-group label {
+          display: block;
+          margin-bottom: 5px;
+          font-weight: 500;
+          color: #333;
+        }
+
+        .form-group input,
+        .form-group textarea {
+          width: 100%;
+          padding: 10px;
+          border: 1px solid #ddd;
+          border-radius: 6px;
+          font-size: 14px;
+          box-sizing: border-box;
+        }
+
+        .form-group input.error,
+        .form-group textarea.error {
+          border-color: #dc3545;
+        }
+
+        .error-message {
+          color: #dc3545;
+          font-size: 12px;
+          margin-top: 5px;
+          display: block;
+        }
+
+        .char-count {
+          text-align: right;
+          font-size: 12px;
+          color: #666;
+          margin-top: 5px;
+        }
+
+        .form-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          margin-top: 20px;
+        }
+
+        .import-content {
+          padding: 20px;
+        }
+
+        .import-instructions {
+          margin-bottom: 20px;
+          padding: 15px;
+          background: #f8f9fa;
+          border-radius: 6px;
+        }
+
+        .import-instructions h4 {
+          margin: 0 0 10px 0;
+          color: #333;
+        }
+
+        .import-instructions ul {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .import-instructions li {
+          margin: 5px 0;
+        }
+
+        .file-upload {
+          text-align: center;
+          padding: 20px;
+          border: 2px dashed #ddd;
+          border-radius: 8px;
+        }
+
+        .file-info {
+          margin-top: 10px;
+          color: #666;
+          font-size: 12px;
+        }
+
+        .message-content {
+          padding: 20px;
+          line-height: 1.6;
+        }
+
+        @media (max-width: 768px) {
+          .contact-manager {
+            padding: 10px;
+          }
+
+          .manager-header {
+            flex-direction: column;
+            gap: 15px;
+            text-align: center;
+          }
+
+          .toolbar {
+            flex-direction: column;
+            gap: 15px;
+          }
+
+          .action-buttons {
+            flex-wrap: wrap;
+            justify-content: center;
+          }
+
+          .contacts-table-container {
+            overflow-x: auto;
+          }
+
+          .contacts-table {
+            min-width: 1000px;
+          }
+
+          .form-row {
+            flex-direction: column;
+          }
+
+          .modal {
+            width: 95%;
+            margin: 20px;
+          }
+        }
+      }</style>
+        .contact-manager {
+          padding: 20px;
+          max-width: 1400px;
+          margin: 0 auto;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .manager-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+          padding: 20px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          border-radius: 10px;
+        }
+
+        .stats-summary {
+          display: flex;
+          gap: 30px;
+        }
+
+        .stat-item {
+          text-align: center;
+        }
+
+        .stat-number {
+          display: block;
+          font-size: 24px;
+          font-weight: bold;
+        }
+
+        .stat-label {
+          font-size: 12px;
+          opacity: 0.9;
+        }
+
+        .toolbar {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+          padding: 15px;
+          background: white;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .search-section {
+          flex: 1;
+          max-width: 400px;
+        }
+
+        .search-box {
+          position: relative;
+        }
+
+        .search-input {
+          width: 100%;
+          padding: 10px 40px 10px 15px;
+          border: 1px solid #ddd;
+          border-radius: 6px;
+          font-size: 14px;
+        }
+
+        .search-clear {
+          position: absolute;
+          right: 10px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: #999;
+        }
+
+        .action-buttons {
+          display: flex;
+          gap: 10px;
+        }
+
+        .btn {
+          padding: 10px 16px;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          font-weight: 500;
+          transition: all 0.3s ease;
+          text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .btn-primary {
+          background: #007bff;
+          color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+          background: #0056b3;
+        }
+
+        .btn-secondary {
+          background: #6c757d;
+          color: white;
+        }
+
+        .btn-info {
+          background: #17a2b8;
+          color: white;
+        }
+
+        .btn-danger {
+          background: #dc3545;
+          color: white;
+        }
+
+        .contacts-table-container {
+          background: white;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .contacts-table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+
+        .contacts-table th {
+          background: #f8f9fa;
+          padding: 12px;
+          text-align: left;
+          font-weight: 600;
+          border-bottom: 2px solid #dee2e6;
+          font-size: 12px;
+          text-transform: uppercase;
+        }
+
+        .contacts-table td {
+          padding: 12px;
+          border-bottom: 1px solid #dee2e6;
+          vertical-align: middle;
+        }
+
+        .contacts-table tr:hover {
+          background: #f8f9fa;
+        }
+
+        .contacts-table tr.selected {
+          background: #e3f2fd;
+        }
+
+        .contact-name {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .avatar {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: #007bff;
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: bold;
+          font-size: 14px;
+        }
+
+        .phone-cell {
+          font-family: monospace;
+          font-size: 13px;
+        }
+
+        .message-cell {
+          max-width: 250px;
+        }
+
+        .message-preview {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .message-text {
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .view-full-message {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 2px;
+          opacity: 0.7;
+        }
+
+        .view-full-message:hover {
+          opacity: 1;
+        }
+
+        .status-badge {
+          padding: 4px 8px;
+          border-radius: 12px;
+          color: white;
+          font-size: 11px;
+          font-weight: bold;
+          text-transform: uppercase;
+        }
+
+        .completitud-bar {
+          position: relative;
+          width: 80px;
+          height: 20px;
+          background: #e9ecef;
+          border-radius: 10px;
+          overflow: hidden;
+        }
+
+        .completitud-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #28a745 100%);
+          transition: width 0.3s ease;
+        }
+
+        .completitud-text {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          font-size: 10px;
+          font-weight: bold;
+          color: #333;
+        }
+
+        .action-buttons-cell {
+          display: flex;
+          gap: 5px;
+        }
+
+        .btn-icon {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 5px;
+          border-radius: 4px;
+          transition: background 0.2s ease;
+        }
+
+        .btn-edit:hover {
+          background: #e3f2fd;
+        }
+
+        .btn-delete:hover {
+          background: #ffebee;
+        }
+
+        .no-data {
+          text-align: center;
+          color: #666;
+          font-style: italic;
+          padding: 40px;
+        }
+      `}</style>
     </div>
   );
-};
-
-// Componente Modal de Agregar Contacto
-const AddContactModal = ({ onClose, onAdd }) => {
-  const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    company: '',
-    city: ''
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!formData.phone.trim()) {
-      alert('El número de teléfono es requerido');
-      return;
-    }
-
-    onAdd(formData);
-  };
-
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
-  };
-
-  return (
-    <div style={{ 
-      position: 'fixed', 
-      inset: 0, 
-      backgroundColor: 'rgba(0, 0, 0, 0.5)', 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      zIndex: 50 
-    }}>
-    <div style={{ 
-       backgroundColor: 'white', 
-       borderRadius: '0.5rem', 
-       padding: '1.5rem', 
-       width: '100%', 
-       maxWidth: '28rem', 
-       margin: '1rem' 
-     }}>
-       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-         <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#1a202c' }}>Agregar Contacto</h2>
-         <button 
-           onClick={onClose} 
-           style={{ color: '#6b7280', background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer' }}
-         >
-           ✕
-         </button>
-       </div>
-
-       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-         <div>
-           <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.25rem' }}>
-             Nombre
-           </label>
-           <input
-             type="text"
-             name="name"
-             value={formData.name}
-             onChange={handleChange}
-             style={{ 
-               width: '100%', 
-               padding: '0.75rem', 
-               border: '1px solid #d1d5db', 
-               borderRadius: '0.5rem',
-               fontSize: '0.875rem'
-             }}
-             placeholder="Ej: Juan Pérez"
-           />
-         </div>
-
-         <div>
-           <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.25rem' }}>
-             Teléfono *
-           </label>
-           <input
-             type="tel"
-             name="phone"
-             value={formData.phone}
-             onChange={handleChange}
-             required
-             style={{ 
-               width: '100%', 
-               padding: '0.75rem', 
-               border: '1px solid #d1d5db', 
-               borderRadius: '0.5rem',
-               fontSize: '0.875rem'
-             }}
-             placeholder="Ej: +1234567890"
-           />
-         </div>
-
-         <div>
-           <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.25rem' }}>
-             Email
-           </label>
-           <input
-             type="email"
-             name="email"
-             value={formData.email}
-             onChange={handleChange}
-             style={{ 
-               width: '100%', 
-               padding: '0.75rem', 
-               border: '1px solid #d1d5db', 
-               borderRadius: '0.5rem',
-               fontSize: '0.875rem'
-             }}
-             placeholder="Ej: juan@email.com"
-           />
-         </div>
-
-         <div>
-           <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.25rem' }}>
-             Empresa
-           </label>
-           <input
-             type="text"
-             name="company"
-             value={formData.company}
-             onChange={handleChange}
-             style={{ 
-               width: '100%', 
-               padding: '0.75rem', 
-               border: '1px solid #d1d5db', 
-               borderRadius: '0.5rem',
-               fontSize: '0.875rem'
-             }}
-             placeholder="Ej: Empresa ABC"
-           />
-         </div>
-
-         <div>
-           <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.25rem' }}>
-             Ciudad
-           </label>
-           <input
-             type="text"
-             name="city"
-             value={formData.city}
-             onChange={handleChange}
-             style={{ 
-               width: '100%', 
-               padding: '0.75rem', 
-               border: '1px solid #d1d5db', 
-               borderRadius: '0.5rem',
-               fontSize: '0.875rem'
-             }}
-             placeholder="Ej: Madrid"
-           />
-         </div>
-
-         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', paddingTop: '1rem' }}>
-           <button
-             type="button"
-             onClick={onClose}
-             style={{
-               padding: '0.5rem 1rem',
-               color: '#374151',
-               backgroundColor: '#f3f4f6',
-               border: 'none',
-               borderRadius: '0.5rem',
-               cursor: 'pointer'
-             }}
-             onMouseOver={(e) => e.target.style.backgroundColor = '#e5e7eb'}
-             onMouseOut={(e) => e.target.style.backgroundColor = '#f3f4f6'}
-           >
-             Cancelar
-           </button>
-           <button
-             type="submit"
-             style={{
-               padding: '0.5rem 1rem',
-               backgroundColor: '#25D366',
-               color: 'white',
-               border: 'none',
-               borderRadius: '0.5rem',
-               cursor: 'pointer'
-             }}
-             onMouseOver={(e) => e.target.style.backgroundColor = '#128C7E'}
-             onMouseOut={(e) => e.target.style.backgroundColor = '#25D366'}
-           >
-             Agregar Contacto
-           </button>
-         </div>
-       </form>
-     </div>
-   </div>
- );
 };
 
 export default ContactManager;

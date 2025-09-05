@@ -22,7 +22,8 @@
     "react-dom": "^19.1.1",
     "react-scripts": "^5.0.1",
     "tailwindcss": "^4.1.11",
-    "whatsapp-web.js": "^1.32.0"
+    "whatsapp-web.js": "^1.32.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/react": "^19.1.9",
