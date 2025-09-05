@@ -2,11 +2,12 @@
 import QRCode from './QRCode';
 import ContactManager from './ContactManager';
 import MessageComposer from './components/MessageComposer';
+import GuiaComponent from './components/GuiaComponent';
 
 function App() {
   const [isWhatsAppConnected, setIsWhatsAppConnected] = useState(false);
   const [user, setUser] = useState(null);
-  const [currentView, setCurrentView] = useState('dashboard'); // dashboard, contacts, messages, analytics
+  const [currentView, setCurrentView] = useState('dashboard'); // dashboard, contacts, messages, analytics, guia
 
   // Verificar si hay sesión guardada
   useEffect(() => {
@@ -38,6 +39,8 @@ function App() {
         return <ContactManager />;
       case 'messages':
         return <MessageComposer />;
+      case 'guia':
+        return <GuiaComponent />;
       case 'analytics':
         return <div style={{ padding: '1.5rem', textAlign: 'center' }}>
           <h2>Analíticas</h2>
@@ -115,6 +118,29 @@ function App() {
                   </h3>
                   <p style={{ fontSize: '0.875rem', color: '#718096' }}>
                     Crear campañas personalizadas
+                  </p>
+                </button>
+                
+                <button 
+                  onClick={() => setCurrentView('guia')}
+                  style={{ 
+                    padding: '1rem', 
+                    backgroundColor: '#f7fafc', 
+                    borderRadius: '0.5rem',
+                    textAlign: 'center',
+                    border: '1px solid #e2e8f0',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => e.target.style.backgroundColor = '#edf2f7'}
+                  onMouseOut={(e) => e.target.style.backgroundColor = '#f7fafc'}
+                >
+                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📖</div>
+                  <h3 style={{ fontSize: '1rem', fontWeight: '600', color: '#2d3748' }}>
+                    Guía de Uso
+                  </h3>
+                  <p style={{ fontSize: '0.875rem', color: '#718096' }}>
+                    Manual e instrucciones
                   </p>
                 </button>
                 
@@ -242,6 +268,21 @@ function App() {
                   }}
                 >
                   💬 Mensajes
+                </button>
+                <button
+                  onClick={() => setCurrentView('guia')}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    backgroundColor: currentView === 'guia' ? '#25D366' : 'transparent',
+                    color: currentView === 'guia' ? 'white' : '#6b7280',
+                    border: 'none',
+                    borderRadius: '0.375rem',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    fontWeight: '500'
+                  }}
+                >
+                  📖 Guía
                 </button>
                 <button
                   onClick={() => setCurrentView('analytics')}
