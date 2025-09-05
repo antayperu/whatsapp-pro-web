@@ -432,18 +432,44 @@ class HelperGenerator {
    * FUNCIÓN AUXILIAR: Limpiar texto simple
    */
   limpiarTextoSimple(texto) {
-    if (!texto || typeof texto !== 'string') {
-      return '';
-    }
-    
-    // Eliminar caracteres no ASCII y problemáticos
-    return texto
-      .replace(/[^\x20-\x7E]/g, '') // Solo ASCII imprimibles
-      .replace(/['"]/g, '') // Eliminar comillas
-      .replace(/\s+/g, ' ') // Espacios múltiples a uno
-      .trim()
-      .substring(0, 5000); // Limitar longitud
+  if (!texto || typeof texto !== 'string') {
+    return '';
   }
+  
+  console.log(`🧹 Sanitizando (preservando formato): "${texto.substring(0, 50)}..."`);
+  
+  let textoLimpio = texto;
+  
+  // PASO 1: Preservar saltos de línea convirtiéndolos a \n
+  textoLimpio = textoLimpio.replace(/\r\n/g, '\n');
+  textoLimpio = textoLimpio.replace(/\r/g, '\n');
+  
+  // PASO 2: Solo eliminar caracteres que REALMENTE rompen .BAT
+  const caracteresProhibidosBat = ['"', '%', '|', '<', '>', '&', '^'];
+  
+  caracteresProhibidosBat.forEach(caracter => {
+    textoLimpio = textoLimpio.replace(new RegExp('\\' + caracter, 'g'), '');
+  });
+  
+  // PASO 3: Reemplazar comillas problemáticas por comillas simples
+  textoLimpio = textoLimpio.replace(/[""'']/g, "'");
+  
+  // PASO 4: Limpiar espacios múltiples pero mantener saltos de línea
+  textoLimpio = textoLimpio.replace(/[ \t]+/g, ' ');
+  textoLimpio = textoLimpio.replace(/\n[ \t]+/g, '\n');
+  textoLimpio = textoLimpio.replace(/[ \t]+\n/g, '\n');
+  textoLimpio = textoLimpio.replace(/\n{3,}/g, '\n\n');
+  textoLimpio = textoLimpio.replace(/\n/g, ' ');
+  
+  // PASO 5: Trim y validar longitud
+  textoLimpio = textoLimpio.trim();
+  if (textoLimpio.length > 4000) {
+    textoLimpio = textoLimpio.substring(0, 4000);
+  }
+  
+  console.log(`✅ Texto sanitizado: "${textoLimpio.substring(0, 50)}..."`);
+  return textoLimpio;
+}
 
   /**
    * FUNCIÓN AUXILIAR: Limpiar teléfono simple
@@ -849,12 +875,8 @@ crearBatFuncional(pythonCode, config) {
     const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`;
     const pythonFileName = `ws_script_${timestamp}.py`;
     
-    // Contactos limpios para insertar en el código
-    const contactosLimpios = config.contactos.map(c => 
-      `    {"name": "${(c.name || '').replace(/"/g, '').substring(0, 30)}", "phone": "${c.phone || ''}", "message": "${(c.message || '').replace(/"/g, '').substring(0, 5000)}"}`
-    ).join(',\n');
-
-    // Calcular delays según velocidad
+    
+      // Calcular delays según velocidad
     let delayMin = 3, delayMax = 5;
     if (config.opciones.velocidad.includes('Lenta')) {
       delayMin = 5; delayMax = 8;
@@ -922,12 +944,13 @@ crearBatFuncional(pythonCode, config) {
       `echo. >> "%TEMP%\\${pythonFileName}"`,
       
       // Datos de contactos
-      `echo contactos = [ >> "%TEMP%\\${pythonFileName}"`,
-      contactosLimpios.split('\n').map(linea => 
-        `echo ${linea} >> "%TEMP%\\${pythonFileName}"`
-      ).join('\n'),
-      `echo ] >> "%TEMP%\\${pythonFileName}"`,
+      // Datos de contactos - Usar contactos reales
+      `echo contactos = [] >> "%TEMP%\\${pythonFileName}"`,
       `echo. >> "%TEMP%\\${pythonFileName}"`,
+      ...config.contactos.map((contacto, index) => [
+        `echo contacto = {'name': '${contacto.name.replace(/'/g, "")}', 'phone': '${contacto.phone}', 'message': '${contacto.message.replace(/'/g, "").replace(/\n/g, " ")}'}  >> "%TEMP%\\${pythonFileName}"`,
+        `echo contactos.append(contacto) >> "%TEMP%\\${pythonFileName}"`
+      ]).flat(),
       
       // Función configurar Chrome
       `echo def configurar_chrome(): >> "%TEMP%\\${pythonFileName}"`,
