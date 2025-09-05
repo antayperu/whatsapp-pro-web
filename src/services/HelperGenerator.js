@@ -442,7 +442,7 @@ class HelperGenerator {
       .replace(/['"]/g, '') // Eliminar comillas
       .replace(/\s+/g, ' ') // Espacios múltiples a uno
       .trim()
-      .substring(0, 50); // Limitar longitud
+      .substring(0, 5000); // Limitar longitud
   }
 
   /**
@@ -851,7 +851,7 @@ crearBatFuncional(pythonCode, config) {
     
     // Contactos limpios para insertar en el código
     const contactosLimpios = config.contactos.map(c => 
-      `    {"name": "${(c.name || '').replace(/"/g, '').substring(0, 30)}", "phone": "${c.phone || ''}", "message": "${(c.message || '').replace(/"/g, '').substring(0, 100)}"}`
+      `    {"name": "${(c.name || '').replace(/"/g, '').substring(0, 30)}", "phone": "${c.phone || ''}", "message": "${(c.message || '').replace(/"/g, '').substring(0, 5000)}"}`
     ).join(',\n');
 
     // Calcular delays según velocidad

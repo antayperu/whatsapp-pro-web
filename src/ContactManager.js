@@ -147,8 +147,8 @@ const ContactManager = () => {
 
     if (!contact.mensaje.trim()) {
       newErrors.mensaje = 'El mensaje es obligatorio';
-    } else if (contact.mensaje.length > 500) {
-      newErrors.mensaje = 'El mensaje no puede exceder 500 caracteres';
+    } else if (contact.mensaje.length > 5000) {
+      newErrors.mensaje = 'El mensaje no puede exceder 5000 caracteres';
     }
 
     if (contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) {
@@ -601,7 +601,7 @@ const ContactManager = () => {
                   className={errors.mensaje ? 'error' : ''}
                   placeholder="Mensaje que se enviará por WhatsApp"
                   rows="3"
-                  maxLength="500"
+                  maxLength="5000"
                 />
                 <div className="char-count">{formData.mensaje.length}/500</div>
                 {errors.mensaje && <span className="error-message">{errors.mensaje}</span>}

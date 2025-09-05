@@ -150,8 +150,30 @@ const MessageComposer = () => {
       setSelectedContacts(filteredContacts.map(contact => contact.id));
     }
   };
-
-  // FUNCIÓN PRINCIPAL: Corregida para usar HelperGenerator
+const verificarProcesoCompletado = () => {
+  const intervalo = setInterval(() => {
+    const terminado = window.confirm(
+      "¿El proceso de envío ha terminado?\n\n" +
+      "Marca 'Aceptar' si:\n" +
+      "- La ventana CMD se cerró\n" +
+      "- Viste el mensaje 'Proceso completado'\n" +
+      "- No hay más actividad en la ventana"
+    );
+    
+    if (terminado) {
+      clearInterval(intervalo);
+      setEnviando(false);
+      setProgreso(100);
+      setEstadoProceso('✅ Envío completado - Revisa estadísticas en CMD');
+      logMessage('🎉 Proceso de envío completado exitosamente', 'success');
+      logMessage('📊 Revisa la ventana CMD para estadísticas detalladas', 'info');
+    }
+  }, 30000);
+  
+  setTimeout(() => clearInterval(intervalo), 600000);
+};
+  
+// FUNCIÓN PRINCIPAL: Corregida para usar HelperGenerator
   const generarHelperAutomatico = async () => {
     try {
       if (selectedContacts.length === 0) {
@@ -210,6 +232,18 @@ const MessageComposer = () => {
         logMessage(`📄 Archivo generado: ${resultado.archivo}`, 'info');
         logMessage(`💻 Ejecuta el archivo .BAT - El progreso se muestra en esa ventana`, 'info');
         logMessage(`⏱️ Tiempo estimado: ${Math.ceil(contactosValidados.length * 4 / 60)} minutos`, 'info');
+
+        if (resultado.success) {
+          logMessage(`✅ ${resultado.message}`, 'success');
+          logMessage(`📄 Archivo generado: ${resultado.archivo}`, 'info');
+          logMessage(`💻 Ejecuta el archivo .BAT - El progreso se muestra en esa ventana`, 'info');
+          
+          // AGREGAR ESTA LÍNEA:
+          verificarProcesoCompletado();
+          
+          setProgreso(100);
+          setEstadoProceso('✅ Helper generado. Ejecuta el archivo .BAT descargado.');
+        }
         
         // Simular progreso para la UI (ya que el proceso real será externo)
         setProgreso(100);
@@ -729,7 +763,7 @@ const MessageComposer = () => {
         }
 
         .contacts-list {
-          max-height: 500px;
+          max-height: 300px;
           overflow-y: auto;
         }
 
@@ -839,7 +873,7 @@ const MessageComposer = () => {
 
         .log-container {
           padding: 10px 20px;
-          max-height: 300px;
+          max-height: 400px;
           overflow-y: auto;
           background: #fafafa;
         }
