@@ -455,7 +455,9 @@ const verificarProcesoCompletado = () => {
           <ul>
             <li>✅ Selecciona los contactos para enviar</li>
             <li>📄 Genera el helper y ejecuta el archivo .BAT descargado</li>
-            <li>🌐 Usa el envío web como alternativa manual</li>
+            <li>📁 Ubica y ejecuta el archivo .BAT descargado</li>
+            <li>🖥️ Sigue las instrucciones en la ventana de comandos</li>
+            <li>✅ El proceso se ejecutará automáticamente</li>
           </ul>
         </div>
       </div>
