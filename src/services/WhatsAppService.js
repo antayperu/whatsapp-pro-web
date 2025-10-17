@@ -376,100 +376,179 @@ class WhatsAppService {
   }
 
   /**
-   * Intentar envío automático - COPIADO DE WHATSAPPPROSENDR.PY
-   */
-  intentarEnvioAutomatico(ventana, contacto) {
-    try {
-      // Inyectar script en la ventana para enviar automáticamente
-      const scriptEnvio = `
-        (function() {
-          try {
-            console.log('🚀 Iniciando envío automático para ${contacto.name}...');
-            
-            // MÉTODO 1: Buscar botón de envío con ícono send (igual que Python)
-            const botonEnviar = document.querySelector('span[data-icon="send"]');
-            
-            if (botonEnviar) {
-              console.log('✅ Botón de envío encontrado - enviando...');
-              botonEnviar.click();
-              
-              // Esperar un momento y cerrar ventana
-              setTimeout(() => {
-                console.log('✅ Mensaje enviado - cerrando ventana...');
-                window.close();
-              }, 2000);
-              
-              return true;
-            }
-            
-            // MÉTODO 2: Buscar por aria-label (backup)
-            const botonEnviarAlt = document.querySelector('button[aria-label*="Enviar"], button[aria-label*="Send"]');
-            
-            if (botonEnviarAlt) {
-              console.log('✅ Botón alternativo encontrado - enviando...');
-              botonEnviarAlt.click();
-              
-              setTimeout(() => {
-                console.log('✅ Mensaje enviado - cerrando ventana...');
-                window.close();
-              }, 2000);
-              
-              return true;
-            }
-            
-            // MÉTODO 3: Enter en el área de texto (como Python con Keys.ENTER)
-            const areaTexto = document.querySelector('div[contenteditable="true"][data-tab="10"]');
-            
-            if (areaTexto) {
-              console.log('✅ Área de texto encontrada - enviando con Enter...');
-              
-              // Simular presionar Enter (igual que Python Keys.ENTER)
-              const enterEvent = new KeyboardEvent('keydown', {
-                key: 'Enter',
-                code: 'Enter',
-                keyCode: 13,
-                which: 13,
-                bubbles: true
-              });
-              
-              areaTexto.dispatchEvent(enterEvent);
-              
-              setTimeout(() => {
-                console.log('✅ Enter enviado - cerrando ventana...');
-                window.close();
-              }, 2000);
-              
-              return true;
-            }
-            
-            console.log('⚠️ No se encontró manera de enviar - esperando...');
-            return false;
-            
-          } catch (error) {
-            console.error('❌ Error en envío automático:', error);
-            return false;
-          }
-        })();
-      `;
-
-      // Ejecutar script en la ventana
-      if (ventana && !ventana.closed) {
+ * Intentar envío automático - ACTUALIZADO OCTUBRE 2025
+ */
+      intentarEnvioAutomatico(ventana, contacto) {
         try {
-          ventana.eval(scriptEnvio);
-          this.log(`🤖 Script de envío automático inyectado para ${contacto.name}`, 'info');
-        } catch (error) {
-          this.log(`⚠️ No se pudo inyectar script: ${error.message}`, 'warning');
+          // Inyectar script en la ventana para enviar automáticamente
+          const scriptEnvio = `
+            (function() {
+              try {
+                console.log('🚀 Iniciando envío automático para ${contacto.name}...');
+                
+                // ====================================================
+                // SELECTORES ACTUALIZADOS - OCTUBRE 2025
+                // ====================================================
+                
+                // MÉTODO 1: Por aria-label (EL QUE FUNCIONA EN TU WHATSAPP)
+                let botonEnviar = document.querySelector('[aria-label="Enviar"]') || 
+                                document.querySelector('[aria-label="Send"]');
+                
+                if (botonEnviar) {
+                  console.log('✅ Botón encontrado por aria-label - enviando...');
+                  botonEnviar.click();
+                  
+                  setTimeout(() => {
+                    console.log('✅ Mensaje enviado - cerrando ventana...');
+                    window.close();
+                  }, 2000);
+                  
+                  return true;
+                }
+                
+                // MÉTODO 2: Por data-testid (WhatsApp 2025)
+                botonEnviar = document.querySelector('[data-testid="compose-btn-send"]') ||
+                            document.querySelector('[data-testid="send"]');
+                
+                if (botonEnviar) {
+                  console.log('✅ Botón encontrado por data-testid - enviando...');
+                  botonEnviar.click();
+                  
+                  setTimeout(() => {
+                    console.log('✅ Mensaje enviado - cerrando ventana...');
+                    window.close();
+                  }, 2000);
+                  
+                  return true;
+                }
+                
+                // MÉTODO 3: Por data-icon send (con búsqueda del botón padre)
+                const iconoSend = document.querySelector('[data-icon="send"]');
+                
+                if (iconoSend) {
+                  // Buscar el botón padre
+                  botonEnviar = iconoSend.closest('button') || iconoSend.closest('div[role="button"]');
+                  
+                  if (botonEnviar) {
+                    console.log('✅ Botón encontrado por data-icon - enviando...');
+                    botonEnviar.click();
+                    
+                    setTimeout(() => {
+                      console.log('✅ Mensaje enviado - cerrando ventana...');
+                      window.close();
+                    }, 2000);
+                    
+                    return true;
+                  }
+                }
+                
+                // MÉTODO 4: Buscar cualquier botón cerca del área de texto
+                const botonesEnFooter = document.querySelectorAll('footer button, footer div[role="button"]');
+                
+                for (let boton of botonesEnFooter) {
+                  // Verificar si el botón tiene un ícono de envío
+                  if (boton.querySelector('[data-icon="send"]') || 
+                      boton.getAttribute('aria-label')?.includes('nviar') ||
+                      boton.getAttribute('aria-label')?.includes('end')) {
+                    
+                    console.log('✅ Botón encontrado en footer - enviando...');
+                    boton.click();
+                    
+                    setTimeout(() => {
+                      console.log('✅ Mensaje enviado - cerrando ventana...');
+                      window.close();
+                    }, 2000);
+                    
+                    return true;
+                  }
+                }
+                
+                // MÉTODO 5: ENTER en el área de texto (ÚLTIMO RECURSO)
+                console.log('⚠️ No se encontró botón - intentando con Enter...');
+                
+                const selectoresTextarea = [
+                  'div[contenteditable="true"][data-tab="10"]',
+                  'div[contenteditable="true"][role="textbox"]',
+                  'div[contenteditable="true"]',
+                  'div[data-tab="10"]'
+                ];
+                
+                for (let selector of selectoresTextarea) {
+                  const areaTexto = document.querySelector(selector);
+                  
+                  if (areaTexto) {
+                    console.log('✅ Área de texto encontrada - enviando con Enter...');
+                    
+                    // Enfocar el área de texto
+                    areaTexto.focus();
+                    
+                    // Simular presionar Enter
+                    const enterEvent = new KeyboardEvent('keydown', {
+                      key: 'Enter',
+                      code: 'Enter',
+                      keyCode: 13,
+                      which: 13,
+                      bubbles: true,
+                      cancelable: true
+                    });
+                    
+                    areaTexto.dispatchEvent(enterEvent);
+                    
+                    // También disparar keyup
+                    const enterUpEvent = new KeyboardEvent('keyup', {
+                      key: 'Enter',
+                      code: 'Enter',
+                      keyCode: 13,
+                      which: 13,
+                      bubbles: true,
+                      cancelable: true
+                    });
+                    
+                    areaTexto.dispatchEvent(enterUpEvent);
+                    
+                    setTimeout(() => {
+                      console.log('✅ Enter enviado - cerrando ventana...');
+                      window.close();
+                    }, 2000);
+                    
+                    return true;
+                  }
+                }
+                
+                console.log('❌ No se encontró manera de enviar el mensaje');
+                console.log('📋 Elementos en la página:', {
+                  botonesConAriaLabel: document.querySelectorAll('[aria-label*="nviar"], [aria-label*="end"]').length,
+                  iconosSend: document.querySelectorAll('[data-icon="send"]').length,
+                  areasTexto: document.querySelectorAll('div[contenteditable="true"]').length,
+                  botones: document.querySelectorAll('button').length
+                });
+                
+                return false;
+                
+              } catch (error) {
+                console.error('❌ Error en envío automático:', error);
+                return false;
+              }
+            })();
+          `;
+
+          // Ejecutar script en la ventana
+          if (ventana && !ventana.closed) {
+            try {
+              ventana.eval(scriptEnvio);
+              this.log(`🤖 Script de envío automático inyectado para ${contacto.name}`, 'info');
+            } catch (error) {
+              this.log(`⚠️ No se pudo inyectar script: ${error.message}`, 'warning');
+              
+              // MÉTODO ALTERNATIVO: Usar postMessage
+              this.intentarEnvioConPostMessage(ventana, contacto);
+            }
+          }
           
-          // MÉTODO ALTERNATIVO: Usar postMessage
-          this.intentarEnvioConPostMessage(ventana, contacto);
+        } catch (error) {
+          this.log(`❌ Error en intento de envío automático: ${error.message}`, 'error');
         }
       }
-      
-    } catch (error) {
-      this.log(`❌ Error en intento de envío automático: ${error.message}`, 'error');
-    }
-  }
-
   /**
    * Método alternativo con postMessage
    */

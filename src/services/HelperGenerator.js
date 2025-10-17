@@ -1028,7 +1028,7 @@ crearBatFuncional(pythonCode, config) {
       `echo         url = f"https://web.whatsapp.com/send?phone={telefono}&text={mensaje_url}" >> "%TEMP%\\${pythonFileName}"`,
       `echo         driver.get(url) >> "%TEMP%\\${pythonFileName}"`,
       `echo         time.sleep(3) >> "%TEMP%\\${pythonFileName}"`,
-      `echo         selectores_boton = ["//span[@data-icon='send']", "//span[@data-icon='send']/parent::button", "//button[@aria-label='Enviar']", "//button[@aria-label='Send']"] >> "%TEMP%\\${pythonFileName}"`,
+      `echo         selectores_boton = ["//*[@aria-label='Enviar']", "//*[@aria-label='Send']", "//button[@aria-label='Enviar']", "//button[@aria-label='Send']", "//div[@aria-label='Enviar']", "//div[@aria-label='Send']", "//span[@data-icon='send']/ancestor::button[1]", "//span[@data-icon='send']/../.."] >> "%TEMP%\\${pythonFileName}"`,
       `echo         boton_enviar = None >> "%TEMP%\\${pythonFileName}"`,
       `echo         for selector in selectores_boton: >> "%TEMP%\\${pythonFileName}"`,
       `echo             try: >> "%TEMP%\\${pythonFileName}"`,
