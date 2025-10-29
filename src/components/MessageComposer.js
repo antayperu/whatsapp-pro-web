@@ -451,14 +451,26 @@ const verificarProcesoCompletado = () => {
 
         {/* Instrucciones básicas */}
         <div className="process-instructions">
-          <p>💡 <strong>Instrucciones:</strong></p>
+          <p>💡 <strong>Instrucciones para el Envío Automático:</strong></p>
           <ul>
-            <li>✅ Selecciona los contactos para enviar</li>
-            <li>📄 Genera el helper y ejecuta el archivo .BAT descargado</li>
-            <li>📁 Ubica y ejecuta el archivo .BAT descargado</li>
-            <li>🖥️ Sigue las instrucciones en la ventana de comandos</li>
-            <li>✅ El proceso se ejecutará automáticamente</li>
+            <li>✅ <strong>Paso 1: Selecciona Contactos.</strong> Elige los contactos a los que deseas enviar mensajes.</li>
+            <li>📄 <strong>Paso 2: Genera el Helper.</strong> Haz clic en "GENERAR HELPER AUTOMÁTICO" para descargar el archivo `.BAT`.</li>
+            <li>📁 <strong>Paso 3: Ejecuta el Archivo .BAT.</strong>
+              <ul>
+                <li>Busca el archivo descargado (ej. `WhatsAppSender_Selenium_YYYY-MM-DD_HH-MM-SS.bat`) en tu carpeta de "Descargas".</li>
+                <li>Haz doble clic en él para iniciar el proceso.</li>
+              </ul>
+            </li>
+            <li>🖥️ <strong>Paso 4: Sigue la Ventana de Comandos.</strong>
+              <ul>
+                <li>Se abrirá una ventana negra (CMD). No la cierres.</li>
+                <li>Si se te pide, escanea el código QR con tu WhatsApp móvil.</li>
+                <li>El proceso de envío se ejecutará automáticamente en segundo plano.</li>
+              </ul>
+            </li>
+            <li>✅ <strong>Paso 5: Proceso Completado.</strong> La ventana CMD se cerrará automáticamente al finalizar.</li>
           </ul>
+          <p>✨ <strong>Consejo:</strong> Puedes seguir usando tu computadora mientras el envío se realiza en segundo plano.</p>
         </div>
       </div>
 
